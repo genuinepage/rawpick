@@ -5,13 +5,17 @@
 """
 import statistics
 import sys
-sys.path.insert(0, r"C:\projects\rawpick")
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.catalog import get_db, row_to_dict
 from app import previews
 from app.select import _parse_dt
 from app.tilt import detect_tilt, correction_angle
 
-FOLDER = r"D:\20260820 공연촬영\photo"
+if len(sys.argv) < 2:
+    raise SystemExit("사용법: python scripts/measure_tilt2.py <RAW 폴더 경로>")
+FOLDER = str(Path(sys.argv[1]).resolve())
 
 db = get_db()
 rows = [row_to_dict(r) for r in db.execute(

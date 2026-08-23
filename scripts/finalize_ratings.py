@@ -4,12 +4,14 @@ DB와 XMP 사이드카 모두 갱신 → 캡처원/라이트룸에서 ★4 필�
 """
 import sys
 from pathlib import Path
-sys.path.insert(0, r"C:\projects\rawpick")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.catalog import get_db
 from app import xmp
 
-FOLDER = r"D:\20260820 공연촬영\photo"
-SELECTS = Path(r"D:\20260820 공연촬영\photo\_export\selects")
+if len(sys.argv) < 2:
+    raise SystemExit("사용법: python scripts/finalize_ratings.py <RAW 폴더> [셀렉 폴더=<RAW>/_export/selects]")
+FOLDER = str(Path(sys.argv[1]).resolve())
+SELECTS = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(FOLDER) / "_export" / "selects"
 
 final = {p.stem for d in SELECTS.iterdir() if d.is_dir()
          for p in d.glob("*.jpg")}

@@ -1,6 +1,6 @@
 """공연 구간별 추가 셀렉 — 기존 셀렉분을 제외하고 품질 상위 N장을 추가 선발.
 
-사용: python scripts/extra_select.py <구간폴더명> <추가장수>
+사용: python scripts/extra_select.py <RAW 폴더> <구간폴더명> <추가장수>
   1) 해당 구간 폴더의 기존 셀렉 파일들로 시간 범위를 파악
   2) 그 시간 범위 안의 모든 컷 중 아직 안 뽑힌 것을 후보로
   3) 불량 플래그 제외 + 기존 셀렉과 너무 유사한 연사 중복 제외
@@ -11,16 +11,17 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, r"C:\projects\rawpick")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.catalog import get_db, row_to_dict  # noqa: E402
 from app.select import _parse_dt, SIM_THRESHOLD  # noqa: E402
 from app import xmp  # noqa: E402
 
-FOLDER = r"D:\20260820 공연촬영\photo"
-SELECTS = Path(r"D:\20260820 공연촬영\photo\_export\selects")
-
-section = sys.argv[1] if len(sys.argv) > 1 else "2"
-want = int(sys.argv[2]) if len(sys.argv) > 2 else 100
+if len(sys.argv) < 3:
+    raise SystemExit("사용법: python scripts/extra_select.py <RAW 폴더> <구간폴더명> [추가장수=100]")
+FOLDER = str(Path(sys.argv[1]).resolve())
+SELECTS = Path(FOLDER) / "_export" / "selects"
+section = sys.argv[2]
+want = int(sys.argv[3]) if len(sys.argv) > 3 else 100
 
 db = get_db()
 existing_names = {p.stem for p in (SELECTS / section).glob("*.jpg")}
@@ -87,6 +88,6 @@ for r in picked:
     xmp.write_sidecar(r["path"], 3, "")
 db.commit()
 
-out = Path(r"C:\projects\rawpick\scripts\extra_picks.txt")
+out = Path(__file__).resolve().parent / "extra_picks.txt"
 out.write_text("\n".join(r["filename"] for r in picked), encoding="utf-8")
 print(f"명단 저장: {out}")

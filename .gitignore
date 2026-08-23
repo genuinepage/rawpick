@@ -6,3 +6,13 @@ __pycache__/
 scripts/extra_picks.txt
 scripts/tilt_targets.json
 _test_export.jpg
+# 일회성 테스트/디버그 스크립트 (로컬 전용)
+scripts/test_*.py
+scripts/probe_*.py
+scripts/crop_*.py
+scripts/copy_*.py
+scripts/measure_tilt.py
+scripts/mkview.py
+scripts/cnt.py
+scripts/q_test.py
+scripts/stats_settings.py

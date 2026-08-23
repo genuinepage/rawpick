@@ -10,10 +10,12 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, r"C:\projects\rawpick")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.catalog import get_db, CACHE_ROOT  # noqa: E402
 
-FOLDER = r"D:\20260820 공연촬영\photo"
+if len(sys.argv) < 2:
+    raise SystemExit("사용법: python scripts/train_taste.py <RAW 폴더 경로>")
+FOLDER = str(Path(sys.argv[1]).resolve())
 OUT = CACHE_ROOT / "models" / "taste_head.npz"
 
 db = get_db()

@@ -4,14 +4,18 @@ p99는 피부·림라이트·흰 의상 등 '빛 받는 부분'의 밝기를 대
 p90/p50은 배경 안개·조명 번짐에 속아서 실루엣 컷을 못 잡는다 (실측으로 확인).
 """
 import sys
+from pathlib import Path
+
 import numpy as np
 from PIL import Image
 
-sys.path.insert(0, r"C:\projects\rawpick")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.catalog import get_db  # noqa: E402
 from app import previews  # noqa: E402
 
-FOLDER = r"D:\20260820 공연촬영\photo"
+if len(sys.argv) < 2:
+    raise SystemExit("사용법: python scripts/measure_brightness.py <RAW 폴더 경로>")
+FOLDER = str(Path(sys.argv[1]).resolve())
 
 db = get_db()
 rows = db.execute(
