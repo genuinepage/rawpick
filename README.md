@@ -42,6 +42,24 @@ uv run --no-sync --directory C:\projects\rawpick uvicorn app.main:app --port 876
   (SCUNet 저장소 릴리스가 아니라 **KAIR** 릴리스임에 주의)
 - torch는 cu124 인덱스로 설치 (pyproject 참조)
 
+## 맥 (애플실리콘) 세팅
+
+```bash
+git clone https://github.com/genuinepage/rawpick && cd rawpick
+git clone --depth 1 https://github.com/cszn/SCUNet third_party/SCUNet
+mkdir -p ~/.rawpick/models
+curl -L -o ~/.rawpick/models/scunet_color_real_psnr.pth \
+  https://github.com/cszn/KAIR/releases/download/v1.0/scunet_color_real_psnr.pth
+uv sync          # torch는 맥에서 자동으로 PyPI(MPS 지원)판 설치
+sh rawpick.sh    # 서버 실행 + 브라우저 오픈
+```
+
+- AI 디노이즈는 MPS(애플 GPU)로 자동 실행 — M4 Pro 기준 24MP 장당 약 40~80초 추정
+  (RTX 3090의 10초보다 느리므로 대량 배치는 윈도우 PC 권장)
+- `scripts/` 안의 운영 스크립트들은 윈도우 경로(C:\, D:\)가 하드코딩돼 있어
+  맥에서 쓰려면 경로 수정 필요. 서버 앱 자체는 경로 무관
+- 카탈로그·캐시는 `~/.rawpick/` (PC별 독립 — 같은 폴더를 열면 새로 스캔됨)
+
 ## 실측 교훈 (재발 방지)
 
 - p90/p50 밝기 지표는 무대 안개·백라이트에 속는다 → 피사체 하이라이트는 **p99**

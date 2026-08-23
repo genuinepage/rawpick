@@ -33,7 +33,12 @@ def _get_model():
         from models.network_scunet import SCUNet
         m = SCUNet(in_nc=3, config=[4, 4, 4, 4, 4, 4, 4], dim=64)
         m.load_state_dict(torch.load(WEIGHTS, map_location="cpu"), strict=True)
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            device = "mps"  # 애플실리콘
+        else:
+            device = "cpu"
         _model = (m.to(device).eval(), device)
     return _model
 
@@ -54,12 +59,13 @@ def denoise_rgb(rgb: np.ndarray) -> np.ndarray:
         ys = sorted(set(list(range(0, max(1, H - TILE + 1), step)) + [max(0, H - TILE)]))
         xs = sorted(set(list(range(0, max(1, W - TILE + 1), step)) + [max(0, W - TILE)]))
         coords = [(y, x) for y in ys for x in xs]
-        use_amp = device == "cuda"
+        use_amp = device in ("cuda", "mps")
         with torch.no_grad():
             for i in range(0, len(coords), BATCH):
                 chunk = coords[i:i + BATCH]
                 tiles = torch.stack([img[:, y:y + TILE, x:x + TILE] for y, x in chunk]).to(device)
-                with torch.autocast("cuda", dtype=torch.float16, enabled=use_amp):
+                with torch.autocast(device if device != "cpu" else "cpu",
+                                    dtype=torch.float16, enabled=use_amp):
                     preds = model(tiles)
                 preds = preds.float().cpu().clamp(0, 1)
                 for (y, x), pred in zip(chunk, preds):
