@@ -1,0 +1,8 @@
+# SCUNet은 별도 클론 (README 참조)
+third_party/
+.venv/
+__pycache__/
+*.pyc
+scripts/extra_picks.txt
+scripts/tilt_targets.json
+_test_export.jpg

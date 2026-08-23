@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>rawpick</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header id="topbar">
+  <span id="logo">rawpick</span>
+  <input id="folderInput" type="text" placeholder="RAW 폴더 경로 (예: D:\촬영\20260821_행사)" spellcheck="false">
+  <button id="scanBtn">스캔</button>
+  <div id="progressWrap" hidden><div id="progressBar"></div><span id="progressText"></span></div>
+  <input id="targetInput" type="number" value="1500" min="1" title="목표 컷수" style="width:70px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px">
+  <button id="aiBtn" title="연사그룹·미학점수 기반 자동 별점 (★3=선발 ★2=차점 ★1=통과 0=불량)">AI 셀렉</button>
+  <div id="filters">
+    <select id="ratingFilter">
+      <option value="0">★ 전체</option>
+      <option value="1">★1 이상</option>
+      <option value="2">★2 이상</option>
+      <option value="3">★3 이상</option>
+      <option value="4">★4 이상</option>
+      <option value="5">★5</option>
+    </select>
+    <label class="chk"><input type="checkbox" id="flagFilter"> 의심컷만</label>
+    <label class="chk"><input type="checkbox" id="hideRejected" checked> 리젝트 숨김</label>
+    <input id="thumbSize" type="range" min="120" max="360" value="220" title="썸네일 크기">
+  </div>
+  <span id="counter"></span>
+</header>
+
+<main id="grid" tabindex="0"></main>
+
+<div id="viewer" hidden>
+  <img id="viewerImg" alt="">
+  <div id="viewerInfo"></div>
+  <div id="viewerHint">←→ 이동 · 0-5 별점 · X 리젝트 · 6-9 라벨 · Esc 닫기</div>
+</div>
+
+<footer id="statusbar">
+  <span>단축키: 0-5 별점 · X 리젝트 · 6=빨강 7=노랑 8=초록 9=파랑 · Enter 뷰어 · Shift/Ctrl 다중선택 · A 전체선택</span>
+</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>
