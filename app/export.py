@@ -94,7 +94,8 @@ def _denoise(rgb: np.ndarray, nr_level: int) -> np.ndarray:
 def export_jpeg(raw_path: str, out_path: Path, max_mb: float,
                 mode: str = "raw", lift_ev: float = 0.0,
                 mid_gamma: float = 1.0, nr_level: int = 0,
-                rotate_deg: float = 0.0) -> dict:
+                rotate_deg: float = 0.0,
+                texture_target: float | None = None) -> dict:
     max_bytes = int(max_mb * 1024 * 1024)
     with rawpy.imread(raw_path) as raw:
         try:
@@ -129,8 +130,11 @@ def export_jpeg(raw_path: str, out_path: Path, max_mb: float,
                     pp["fbdd_noise_reduction"] = rawpy.FBDDNoiseReductionMode.Light
             rgb = raw.postprocess(**pp)
             if use_ai:
-                from . import ai_denoise
+                from . import ai_denoise, texture
+                orig = rgb
                 rgb = ai_denoise.denoise_rgb(rgb)
+                # 질감 복원: 피부 가중 디테일 리인젝션 + 레퍼런스 매칭 그레인
+                rgb = texture.restore(rgb, orig, texture_target)
             elif nr_level >= 2:
                 rgb = _denoise(rgb, nr_level)
             if abs(rotate_deg) >= 0.05:

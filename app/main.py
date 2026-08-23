@@ -351,6 +351,25 @@ def _run_export(folder: str, rating: int, max_mb: float, out_dir: str,
                 mid_gamma = max(0.72, 1.0 - 0.25 * min(remain, 1.12 * 2))
             return lift_ev, mid_gamma
 
+        # ---- 질감 복원 목표: 같은 폴더 저감도(ISO<=1000) 밝은 컷의 미세대역 에너지 ----
+        texture_target = None
+        if lift:
+            try:
+                ref = db.execute(
+                    "SELECT path FROM photos WHERE folder=? AND rating>=2 "
+                    "AND brightness > 0.5 AND json_extract(meta,'$.iso') <= 1000 "
+                    "LIMIT 1", (folder,)).fetchone()
+                if ref:
+                    import rawpy
+                    from . import texture
+                    with rawpy.imread(ref["path"]) as raw:
+                        ref_rgb = raw.postprocess(use_camera_wb=True,
+                                                  no_auto_bright=True, output_bps=8)
+                    texture_target = texture.fine_std(ref_rgb)
+            except Exception:
+                import logging
+                logging.exception("질감 레퍼런스 계산 실패 — 그레인 매칭 생략")
+
         # ---- 장면 스무딩: 같은 노출설정(ISO·셔터·조리개) + 30초 이내 연속 컷은
         #      보정값을 장면 중앙값으로 통일 → 인접 컷 간 노출 출렁임 방지 ----
         from .select import _parse_dt
@@ -423,7 +442,7 @@ def _run_export(folder: str, rating: int, max_mb: float, out_dir: str,
                 rot = correction_angle(r["tilt"])
             futures.append(_executor.submit(
                 exp.export_jpeg, r["path"], out / (Path(r["filename"]).stem + ".jpg"),
-                max_mb, mode, lift_ev, mid_gamma, nr, rot))
+                max_mb, mode, lift_ev, mid_gamma, nr, rot, texture_target))
         for f in futures:
             try:
                 res = f.result()
