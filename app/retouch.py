@@ -44,20 +44,25 @@ def available() -> bool:
 
 
 _yunet = None
+_yunet_lock = threading.Lock()
 
 
 def _find_face_boxes(rgb: np.ndarray) -> list[tuple[float, float, float, float]]:
-    """YuNet으로 얼굴 박스 검출 (무대 거리 소형 얼굴 대응). 원본 좌표 (x,y,w,h)."""
+    """YuNet으로 얼굴 박스 검출 (무대 거리 소형 얼굴 대응). 원본 좌표 (x,y,w,h).
+
+    YuNet 인스턴스는 setInputSize/detect가 상태를 공유하므로 전역 락으로 직렬화.
+    """
     global _yunet
     h, w = rgb.shape[:2]
     scale = min(1.0, 1600.0 / w)
     dw, dh = int(w * scale), int(h * scale)
-    if _yunet is None:
-        _yunet = cv2.FaceDetectorYN.create(str(YUNET_PATH), "", (dw, dh),
-                                           score_threshold=0.6)
-    _yunet.setInputSize((dw, dh))
     small = cv2.resize(rgb, (dw, dh), interpolation=cv2.INTER_AREA)
-    _, dets = _yunet.detect(cv2.cvtColor(small, cv2.COLOR_RGB2BGR))
+    with _yunet_lock:
+        if _yunet is None:
+            _yunet = cv2.FaceDetectorYN.create(str(YUNET_PATH), "", (dw, dh),
+                                               score_threshold=0.6)
+        _yunet.setInputSize((dw, dh))
+        _, dets = _yunet.detect(cv2.cvtColor(small, cv2.COLOR_RGB2BGR))
     boxes = []
     if dets is not None:
         for d in dets:

@@ -95,9 +95,42 @@ def export_jpeg(raw_path: str, out_path: Path, max_mb: float,
                 mode: str = "raw", lift_ev: float = 0.0,
                 mid_gamma: float = 1.0, nr_level: int = 0,
                 rotate_deg: float = 0.0,
-                texture_target: float | None = None) -> dict:
+                texture_target: float | None = None,
+                resize_long: int = 0) -> dict:
     max_bytes = int(max_mb * 1024 * 1024)
-    with rawpy.imread(raw_path) as raw:
+    try:
+        raw_ctx = rawpy.imread(raw_path)
+    except rawpy.LibRawFileUnsupportedError:
+        raw_ctx = None
+    if raw_ctx is None:
+        # LibRaw 미지원 신기종 폴백: 임베디드 풀사이즈 JPEG + 근사 노출 보정
+        # (리뷰용. 최종 고품질 출력은 DNG 변환 후 정식 경로로)
+        from . import previews as _pv
+        img, _m = _pv.arw_fallback(raw_path)
+        if img is None:
+            raise RuntimeError("RAW 디코드 불가 (LibRaw 미지원 + 임베디드 추출 실패)")
+        rgb = np.asarray(img.convert("RGB"))
+        if lift_ev > 0.01:
+            lin = (rgb.astype(np.float32) / 255.0) ** 2.2
+            lin *= 2.0 ** lift_ev
+            over = lin > 0.8  # 부드러운 숄더로 하이라이트 보호
+            lin[over] = 0.8 + 0.2 * (1.0 - np.exp(-(lin[over] - 0.8) / 0.25))
+            rgb = (np.clip(lin, 0, 1) ** (1 / 2.2) * 255.0 + 0.5).astype(np.uint8)
+        black_point = min(0.10, 0.035 * lift_ev)
+        if mid_gamma < 0.995 or black_point > 0.005:
+            rgb = _tone_lut(mid_gamma, black_point=black_point)[rgb]
+        if resize_long > 0 and max(rgb.shape[:2]) > resize_long:
+            import cv2
+            s = resize_long / max(rgb.shape[:2])
+            rgb = cv2.resize(rgb, (max(1, int(rgb.shape[1] * s)),
+                                   max(1, int(rgb.shape[0] * s))),
+                             interpolation=cv2.INTER_AREA)
+        data = _save_under(Image.fromarray(rgb), max_bytes, None)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(data)
+        return {"size": len(data), "recompressed": True}
+
+    with raw_ctx as raw:
         try:
             thumb = raw.extract_thumb()
             embedded = thumb.data if thumb.format == rawpy.ThumbFormat.JPEG else None
@@ -144,6 +177,12 @@ def export_jpeg(raw_path: str, out_path: Path, max_mb: float,
             black_point = min(0.10, 0.035 * lift_ev)
             if mid_gamma < 0.995 or black_point > 0.005:
                 rgb = _tone_lut(mid_gamma, black_point=black_point)[rgb]
+            if resize_long > 0 and max(rgb.shape[:2]) > resize_long:
+                import cv2
+                s = resize_long / max(rgb.shape[:2])
+                rgb = cv2.resize(rgb, (max(1, int(rgb.shape[1] * s)),
+                                       max(1, int(rgb.shape[0] * s))),
+                                 interpolation=cv2.INTER_AREA)
             img = Image.fromarray(rgb)
             exif = None
             if embedded:

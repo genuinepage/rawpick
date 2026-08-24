@@ -289,6 +289,8 @@ class ExportReq(BaseModel):
     rating: int          # 이 별점인 컷만
     max_mb: float = 6.0
     mode: str = "raw"    # raw=풀디코드(고화질) | embedded=카메라 내장 JPEG(초고속)
+    nr: bool = True      # False = 노이즈리덕션·질감복원 생략 (셀렉 리뷰용)
+    resize_long: int = 0  # >0이면 긴변을 이 픽셀로 축소 (리뷰용 저용량)
     only_files: list[str] = []  # 지정 시 해당 파일명만 (증분 재출력용)
     straighten: bool = False    # DB의 tilt 기반 수평 보정 (0.3~3°만, 더치앵글 제외)
     lift: bool = False   # 어두운 컷 하한선 리프트 + 톤커브 (암부↓ 명부↑ 미드톤↑)
@@ -300,7 +302,8 @@ class ExportReq(BaseModel):
 def _run_export(folder: str, rating: int, max_mb: float, out_dir: str,
                 mode: str = "raw", lift: bool = False,
                 lift_min_ev: float = 1.0, lift_max_ev: float = 3.0,
-                only_files: list[str] | None = None, straighten: bool = False):
+                only_files: list[str] | None = None, straighten: bool = False,
+                nr: bool = True, resize_long: int = 0):
     import math
     from . import export as exp
     db = get_db()
@@ -362,7 +365,11 @@ def _run_export(folder: str, rating: int, max_mb: float, out_dir: str,
                 if ref:
                     import rawpy
                     from . import texture
-                    with rawpy.imread(ref["path"]) as raw:
+                    ref_path = ref["path"]
+                    ref_dng = Path(folder) / "_dng" / (Path(ref_path).stem + ".dng")
+                    if ref_dng.exists():
+                        ref_path = str(ref_dng)
+                    with rawpy.imread(ref_path) as raw:
                         ref_rgb = raw.postprocess(use_camera_wb=True,
                                                   no_auto_bright=True, output_bps=8)
                     texture_target = texture.fine_std(ref_rgb)
@@ -431,18 +438,26 @@ def _run_export(folder: str, rating: int, max_mb: float, out_dir: str,
                 return 1
             return 0
 
+        # LibRaw 미지원 기종 대응: _dng 폴더에 변환본이 있으면 그걸 소스로 사용
+        dng_dir = Path(folder) / "_dng"
+
+        def source_of(r):
+            dng = dng_dir / (Path(r["filename"]).stem + ".dng")
+            return str(dng) if dng.exists() else r["path"]
+
         futures = []
         for r in rows:
             lift_ev, mid_gamma = adjust_by_name.get(
                 r["filename"], adjust_of(r["brightness"], r["brightness_mid"]))
-            nr = nr_level_of(r["meta"], lift_ev)
+            nr_lv = nr_level_of(r["meta"], lift_ev) if nr else 0
             rot = 0.0
             if straighten:
                 from .tilt import correction_angle
                 rot = correction_angle(r["tilt"])
             futures.append(_executor.submit(
-                exp.export_jpeg, r["path"], out / (Path(r["filename"]).stem + ".jpg"),
-                max_mb, mode, lift_ev, mid_gamma, nr, rot, texture_target))
+                exp.export_jpeg, source_of(r), out / (Path(r["filename"]).stem + ".jpg"),
+                max_mb, mode, lift_ev, mid_gamma, nr_lv, rot, texture_target,
+                resize_long))
         for f in futures:
             try:
                 res = f.result()
@@ -473,7 +488,8 @@ def export_photos(req: ExportReq):
     threading.Thread(target=_run_export,
                      args=(folder, req.rating, req.max_mb, req.out_dir, req.mode,
                            req.lift, req.lift_min_ev, req.lift_max_ev,
-                           req.only_files or None, req.straighten),
+                           req.only_files or None, req.straighten,
+                           req.nr, req.resize_long),
                      daemon=True).start()
     return {"started": True}
 
