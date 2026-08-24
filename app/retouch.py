@@ -19,7 +19,7 @@ MODEL_PATH = CACHE_ROOT / "models" / "face_landmarker.task"
 YUNET_PATH = CACHE_ROOT / "models" / "face_detection_yunet_2023mar.onnx"
 
 # 기본 강도 (약한 수준 고정)
-SKIN_BLEND = 0.25       # 피부 정돈 블렌딩
+SKIN_BLEND = 0.40       # 피부 정돈 블렌딩 (사용자 확정: 25%→40% 1단계 상향)
 JAW_SLIM = 0.007        # 턱선 이동량 (얼굴폭 비율)
 MIN_FACE_SKIN = 140     # 피부 정돈 최소 얼굴 높이(px)
 MIN_FACE_RESHAPE = 300  # 턱선 보정 최소 얼굴 높이(px)
@@ -73,7 +73,8 @@ def _get_landmarker():
         from mediapipe.tasks.python import vision
         opts = vision.FaceLandmarkerOptions(
             base_options=mp_python.BaseOptions(model_asset_path=str(MODEL_PATH)),
-            num_faces=8, min_face_detection_confidence=0.4)
+            num_faces=8, min_face_detection_confidence=0.4,
+            output_facial_transformation_matrixes=True)
         _landmarker = vision.FaceLandmarker.create_from_options(opts)
     return _landmarker
 
@@ -105,8 +106,18 @@ def _detect(rgb: np.ndarray):
         pts = np.array([[p.x * chip_s.shape[1] / cscale + x0,
                          p.y * chip_s.shape[0] / cscale + y0]
                         for p in lms], dtype=np.float32)
-        faces.append(pts)
+        yaw = None
+        if res.facial_transformation_matrixes:
+            m = np.array(res.facial_transformation_matrixes[0])
+            # 회전행렬에서 yaw 추출
+            yaw = abs(math_degrees_asin(-m[2, 0]))
+        faces.append((pts, yaw))
     return faces
+
+
+def math_degrees_asin(v: float) -> float:
+    import math
+    return math.degrees(math.asin(max(-1.0, min(1.0, float(v)))))
 
 
 def _skin_mask(shape, pts) -> np.ndarray:
@@ -173,30 +184,23 @@ def _slim_jaw(rgb: np.ndarray, pts, k: float) -> np.ndarray:
     if rh < 40 or rw < 40:
         return rgb
 
-    src_pts = []
-    dst_pts = []
+    # 가우시안 변위장: 턱선 포인트 주변만 국소적으로 안쪽으로 밀기.
+    # (TPS warpImage는 불안정해 이미지가 깨지는 사례가 있어 명시적 리맵으로 대체)
+    sigma = face_w * 0.16
+    acc_dx = np.zeros((rh, rw), dtype=np.float32)
+    acc_w = np.zeros((rh, rw), dtype=np.float32)
+    yy, xx = np.mgrid[0:rh, 0:rw].astype(np.float32)
     for i in JAWLINE:
         x, y = pts[i]
-        dx = (cx - x) * k * 2.0  # k = 얼굴폭 대비 이동 비율
-        src_pts.append([x - x0, y - y0])
-        dst_pts.append([x - x0 + dx, y - y0])
-    # 고정 앵커: ROI 경계 16점 + 눈·코·이마 (배경·상반부 왜곡 방지)
-    for fx in np.linspace(0, rw - 1, 5):
-        for fy in (0, rh - 1):
-            src_pts.append([fx, fy]); dst_pts.append([fx, fy])
-    for fy in np.linspace(0, rh - 1, 5)[1:-1]:
-        for fx in (0, rw - 1):
-            src_pts.append([fx, fy]); dst_pts.append([fx, fy])
-    for i in (4, 33, 263, 10, 152):
-        x, y = pts[i]
-        src_pts.append([x - x0, y - y0]); dst_pts.append([x - x0, y - y0])
-
-    src = np.array(src_pts, dtype=np.float32).reshape(1, -1, 2)
-    dst = np.array(dst_pts, dtype=np.float32).reshape(1, -1, 2)
-    matches = [cv2.DMatch(i, i, 0) for i in range(src.shape[1])]
-    tps = cv2.createThinPlateSplineShapeTransformer()
-    tps.estimateTransformation(src, dst, matches)  # dst 위치의 픽셀을 src에서 가져옴
-    warped = tps.warpImage(roi)
+        lx, ly = x - x0, y - y0
+        dx = (cx - x) * k * 2.0
+        w_map = np.exp(-((xx - lx) ** 2 + (yy - ly) ** 2) / (2 * sigma * sigma))
+        acc_dx += w_map * dx
+        acc_w += w_map
+    flow_x = acc_dx / np.maximum(acc_w, 1.0)  # 겹침 평균 (앵커 불필요, 멀면 자연 감쇠)
+    map_x = xx - flow_x.astype(np.float32)    # 역방향 샘플링 (소변위 근사)
+    map_y = yy
+    warped = cv2.remap(roi, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
     out = rgb.copy()
     out[y0:y1, x0:x1] = warped
     return out
@@ -211,12 +215,13 @@ def retouch(rgb: np.ndarray, skin: bool = True, reshape: bool = True,
     faces = _detect(rgb)
     stats["faces"] = len(faces)
     out = rgb
-    for pts in faces:
+    for pts, yaw in faces:
         face_h = float(np.ptp(pts[FACE_OVAL][:, 1]))
         if skin and face_h >= MIN_FACE_SKIN:
             out = _smooth_skin(out, pts, skin_blend)
             stats["skin"] += 1
-        if reshape and face_h >= MIN_FACE_RESHAPE and _frontal_enough(pts):
+        frontal = (yaw is not None and yaw <= 20.0) or (yaw is None and _frontal_enough(pts))
+        if reshape and face_h >= MIN_FACE_RESHAPE and frontal:
             out = _slim_jaw(out, pts, jaw_k)
             stats["reshape"] += 1
     return out, stats

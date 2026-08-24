@@ -32,7 +32,7 @@ def restore(den: np.ndarray, orig: np.ndarray,
     try:
         from . import retouch
         if retouch.available():
-            for pts in retouch._detect(orig):
+            for pts, _yaw in retouch._detect(orig):
                 m = retouch._skin_mask(orig.shape, pts)
                 alpha = np.maximum(alpha, ALPHA_BASE + (ALPHA_SKIN - ALPHA_BASE) * m)
     except Exception:
