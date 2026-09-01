@@ -28,7 +28,20 @@ uv run --no-sync --directory C:\projects\rawpick uvicorn app.main:app --port 876
      (RTX 3090 기준 24MP 장당 ~10초). 미만은 FBDD 고전 NR
    - 수평보정: Hough 바닥선 검출(CLAHE 전처리), 0.3~5°만, 더치앵글·저신뢰 제외
    - JPEG 품질 95 상한 + 목표용량(6~10MB) 이진탐색, EXIF 이식
+   - **인물 보정**(`retouch`: off|skin|full): 피부 정돈 40%(주파수 분리) / full은 턱선까지
+     (가우시안 변위장, yaw 20° 게이트). 색감·노출 무보정 출력은 `lift:false`로
 6. **XMP 사이드카**: 별점·컬러라벨을 라이트룸/캡처원 호환으로 항시 동기화
+
+## LibRaw 미지원 신기종 (a7M5 등)
+
+LibRaw가 아직 지원하지 않는 신기종 ARW는 브라우징·셀렉은 임베디드 JPEG 폴백으로 그대로
+동작하고, **최종 고품질 출력만 DNG 변환을 거친다**:
+
+1. Adobe DNG Converter 설치 (무료, helpx.adobe.com)
+2. `python scripts/convert_dng.py <RAW폴더>` → `<폴더>/_dng`에 변환 (약 1.2초/장)
+3. 이후 export는 `_dng` 변환본을 자동으로 소스로 사용 — 별도 설정 불필요
+
+DNG는 센서 데이터 무손실이므로 화질 차이 없음. 원본 ARW는 그대로 보관.
 
 ## 별점 체계
 
@@ -50,14 +63,22 @@ git clone --depth 1 https://github.com/cszn/SCUNet third_party/SCUNet
 mkdir -p ~/.rawpick/models
 curl -L -o ~/.rawpick/models/scunet_color_real_psnr.pth \
   https://github.com/cszn/KAIR/releases/download/v1.0/scunet_color_real_psnr.pth
+curl -L -o ~/.rawpick/models/face_landmarker.task \
+  https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+curl -L -o ~/.rawpick/models/face_detection_yunet_2023mar.onnx \
+  https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
 uv sync          # torch는 맥에서 자동으로 PyPI(MPS 지원)판 설치
 sh rawpick.sh    # 서버 실행 + 브라우저 오픈
 ```
 
 - AI 디노이즈는 MPS(애플 GPU)로 자동 실행 — M4 Pro 기준 24MP 장당 약 40~80초 추정
   (RTX 3090의 10초보다 느리므로 대량 배치는 윈도우 PC 권장)
-- `scripts/` 안의 운영 스크립트들은 윈도우 경로(C:\, D:\)가 하드코딩돼 있어
-  맥에서 쓰려면 경로 수정 필요. 서버 앱 자체는 경로 무관
+- 얼굴 보정 모델 2종도 최초 실행 시 필요: `~/.rawpick/models/`에
+  `face_landmarker.task`(MediaPipe)와 `face_detection_yunet_2023mar.onnx`(OpenCV Zoo)
+- a7M5 등 신기종은 DNG Converter 맥판 설치 후 `python scripts/convert_dng.py <폴더>`
+  (앱 경로 자동 탐지)
+- 운영 스크립트는 폴더 경로를 인자로 받는다: `finalize_ratings.py <폴더>`,
+  `measure_all.py <폴더>`, `train_taste.py <폴더>` 등. 서버 앱 자체는 경로 무관
 - 카탈로그·캐시는 `~/.rawpick/` (PC별 독립 — 같은 폴더를 열면 새로 스캔됨)
 
 ## 실측 교훈 (재발 방지)

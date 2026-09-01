@@ -16,3 +16,11 @@ scripts/mkview.py
 scripts/cnt.py
 scripts/q_test.py
 scripts/stats_settings.py
+scripts/final_export_*.py
+scripts/group_*.py
+scripts/one*.py
+scripts/wb*.py
+scripts/retry_*.py
+scripts/restage.py
+scripts/select_stages.py
+scripts/stage_*.txt

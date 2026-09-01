@@ -96,7 +96,8 @@ def export_jpeg(raw_path: str, out_path: Path, max_mb: float,
                 mid_gamma: float = 1.0, nr_level: int = 0,
                 rotate_deg: float = 0.0,
                 texture_target: float | None = None,
-                resize_long: int = 0) -> dict:
+                resize_long: int = 0,
+                retouch_mode: str = "off") -> dict:  # off | skin | full
     max_bytes = int(max_mb * 1024 * 1024)
     try:
         raw_ctx = rawpy.imread(raw_path)
@@ -173,6 +174,11 @@ def export_jpeg(raw_path: str, out_path: Path, max_mb: float,
             if abs(rotate_deg) >= 0.05:
                 from .tilt import rotate_level
                 rgb = rotate_level(rgb, rotate_deg)
+            if retouch_mode in ("skin", "full"):
+                from . import retouch as rt
+                if rt.available():
+                    rgb, _st = rt.retouch(rgb, skin=True,
+                                          reshape=(retouch_mode == "full"))
             # 블랙포인트: 리프트량 비례로 암부 바닥을 재고정 (뿌연 암부 방지)
             black_point = min(0.10, 0.035 * lift_ev)
             if mid_gamma < 0.995 or black_point > 0.005:

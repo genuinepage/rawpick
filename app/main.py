@@ -290,6 +290,7 @@ class ExportReq(BaseModel):
     max_mb: float = 6.0
     mode: str = "raw"    # raw=풀디코드(고화질) | embedded=카메라 내장 JPEG(초고속)
     nr: bool = True      # False = 노이즈리덕션·질감복원 생략 (셀렉 리뷰용)
+    retouch: str = "off"  # off | skin(피부만) | full(피부+턱선)
     resize_long: int = 0  # >0이면 긴변을 이 픽셀로 축소 (리뷰용 저용량)
     only_files: list[str] = []  # 지정 시 해당 파일명만 (증분 재출력용)
     straighten: bool = False    # DB의 tilt 기반 수평 보정 (0.3~3°만, 더치앵글 제외)
@@ -303,7 +304,7 @@ def _run_export(folder: str, rating: int, max_mb: float, out_dir: str,
                 mode: str = "raw", lift: bool = False,
                 lift_min_ev: float = 1.0, lift_max_ev: float = 3.0,
                 only_files: list[str] | None = None, straighten: bool = False,
-                nr: bool = True, resize_long: int = 0):
+                nr: bool = True, resize_long: int = 0, retouch_mode: str = "off"):
     import math
     from . import export as exp
     db = get_db()
@@ -356,7 +357,7 @@ def _run_export(folder: str, rating: int, max_mb: float, out_dir: str,
 
         # ---- 질감 복원 목표: 같은 폴더 저감도(ISO<=1000) 밝은 컷의 미세대역 에너지 ----
         texture_target = None
-        if lift:
+        if nr:
             try:
                 ref = db.execute(
                     "SELECT path FROM photos WHERE folder=? AND rating>=2 "
@@ -457,7 +458,7 @@ def _run_export(folder: str, rating: int, max_mb: float, out_dir: str,
             futures.append(_executor.submit(
                 exp.export_jpeg, source_of(r), out / (Path(r["filename"]).stem + ".jpg"),
                 max_mb, mode, lift_ev, mid_gamma, nr_lv, rot, texture_target,
-                resize_long))
+                resize_long, retouch_mode))
         for f in futures:
             try:
                 res = f.result()
@@ -489,7 +490,7 @@ def export_photos(req: ExportReq):
                      args=(folder, req.rating, req.max_mb, req.out_dir, req.mode,
                            req.lift, req.lift_min_ev, req.lift_max_ev,
                            req.only_files or None, req.straighten,
-                           req.nr, req.resize_long),
+                           req.nr, req.resize_long, req.retouch),
                      daemon=True).start()
     return {"started": True}
 
